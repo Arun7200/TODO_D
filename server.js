@@ -7,25 +7,23 @@ dotenv.config();
 
 const app = express();
 
+// EJS Template Engine
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
+// Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-// Mongoose Connection
-mongoose.connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
-.then(() => console.log("MongoDB connected"))
-.catch((err) => {
-    console.error("MongoDB connection error:", err);
-    process.exit(1); // stop app if DB fails
-});
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log("MongoDB connected"))
+    .catch((err) => {
+        console.error("MongoDB connection error:", err.message);
+        process.exit(1); // Stop app if DB fails
+    });
 
-mongoose.connection.on('error', err => {
-    console.error('Mongoose error:', err);
+mongoose.connection.on("error", err => {
+    console.error("Mongoose error:", err.message);
 });
 
 // Schema & Model
@@ -45,14 +43,19 @@ const defaultItems = [
 ];
 
 // Seed DB if empty
-Task.find({})
-.then(existing => {
-    if (existing.length === 0) {
-        return Task.insertMany(defaultItems);
+async function seedDB() {
+    try {
+        const existing = await Task.find({});
+        if (existing.length === 0) {
+            await Task.insertMany(defaultItems);
+            console.log("Default items inserted");
+        }
+    } catch (err) {
+        console.error("Error seeding DB:", err.message);
     }
-})
-.then(() => console.log("Default items inserted (if DB was empty)"))
-.catch(err => console.error(" Error seeding DB:", err));
+}
+
+seedDB();
 
 // Routes
 app.get("/", async (req, res) => {
@@ -60,7 +63,7 @@ app.get("/", async (req, res) => {
         const tasks = await Task.find({});
         res.render("list", { dayej: tasks });
     } catch (err) {
-        console.error(err);
+        console.error("Error fetching tasks:", err.message);
         res.status(500).send("Internal Server Error");
     }
 });
@@ -68,8 +71,12 @@ app.get("/", async (req, res) => {
 app.post("/", async (req, res) => {
     const itemName = req.body.ele1;
     if (itemName.trim()) {
-        const newItem = new Task({ name: itemName });
-        await newItem.save();
+        try {
+            const newItem = new Task({ name: itemName });
+            await newItem.save();
+        } catch (err) {
+            console.error("Error adding task:", err.message);
+        }
     }
     res.redirect("/");
 });
@@ -79,11 +86,12 @@ app.post("/delete", async (req, res) => {
     try {
         await Task.findByIdAndDelete(checkedId);
     } catch (err) {
-        console.error("Error deleting item:", err);
+        console.error("Error deleting task:", err.message);
     }
     res.redirect("/");
 });
 
+// Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
